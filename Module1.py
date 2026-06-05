@@ -42,6 +42,10 @@ def generate_mock_data(seed: int = 7) -> pd.DataFrame:
     total_rounds = (dau * rng.uniform(35, 52, n_days)).round()
     avg_rounds_device = (total_rounds / dau).round(2)
 
+    avg_duration_per_round = rng.uniform(2.0, 4.5, n_days)
+    total_duration = (total_rounds * avg_duration_per_round).round().astype(int)
+    avg_duration_device = (total_duration / dau).round(2)
+
     return pd.DataFrame({
         "date": pd.to_datetime(dates),
         "new_reg": new_reg.astype(int),
@@ -54,6 +58,8 @@ def generate_mock_data(seed: int = 7) -> pd.DataFrame:
         "retention": retention,
         "total_rounds": total_rounds.astype(int),
         "avg_rounds_device": avg_rounds_device,
+        "total_duration": total_duration,
+        "avg_duration_device": avg_duration_device,
     })
 
 
@@ -74,11 +80,14 @@ def aggregate(frame: pd.DataFrame, gran: str) -> pd.DataFrame:
         retention=("retention", "mean"),
         total_rounds=("total_rounds", "sum"),
         avg_rounds_device=("avg_rounds_device", "mean"),
+        total_duration=("total_duration", "sum"),
+        avg_duration_device=("avg_duration_device", "mean"),
     ).reset_index()
     agg["act_rate"] = agg["cum_act"] / agg["cum_reg"]
     agg["active_rate"] = agg["dau"] / agg["cum_reg"]
     agg["dau"] = agg["dau"].round().astype(int)
     agg["avg_rounds_device"] = agg["avg_rounds_device"].round(2)
+    agg["avg_duration_device"] = agg["avg_duration_device"].round(2)
     agg["date"] = agg["bucket"]
     return agg
 
@@ -242,28 +251,10 @@ def render():
                 )
 
     # ── 留存与互动 ────────────────────────────────────────────────────────────
-    st.markdown('<div class="section-title">留存与互动</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">互动深度</div>', unsafe_allow_html=True)
     row3 = st.columns(2)
 
     with row3[0]:
-        with st.container(border=True):
-            left, right = st.columns([1, 2])
-            with left:
-                cur_ret = adf["retention"].iloc[-1]
-                st.markdown('<div class="metric-label">次日留存率</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="metric-big">{pct(cur_ret)}</div>', unsafe_allow_html=True)
-            with right:
-                tip = [
-                    alt.Tooltip("date:T", title=x_label, format="%Y-%m-%d"),
-                    alt.Tooltip("retention:Q", title="次日留存率", format=".1%"),
-                ]
-                st.altair_chart(
-                    line_chart(adf, "retention", "次日留存", tip,
-                               color="#ea580c", y_format="%"),
-                    use_container_width=True,
-                )
-
-    with row3[1]:
         with st.container(border=True):
             left, right = st.columns([1, 2])
             with left:
@@ -280,8 +271,7 @@ def render():
                     use_container_width=True,
                 )
 
-    row4 = st.columns(2)
-    with row4[0]:
+    with row3[1]:
         with st.container(border=True):
             left, right = st.columns([1, 2])
             with left:
@@ -295,6 +285,49 @@ def render():
                 ]
                 st.altair_chart(
                     line_chart(adf, "avg_rounds_device", "日均设备对话轮次", tip, color="#2563eb"),
+                    use_container_width=True,
+                )
+
+    row4 = st.columns(2)
+    with row4[0]:
+        with st.container(border=True):
+            left, right = st.columns([1, 2])
+            with left:
+                last_total_dur = df.sort_values("date")["total_duration"].iloc[-1]
+                st.markdown('<div class="metric-label">昨日总对话时长</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="metric-big">{fmt_num(last_total_dur)}'
+                    f'<span style="font-size:14px;color:#94a3b8"> 分钟</span></div>',
+                    unsafe_allow_html=True,
+                )
+            with right:
+                tip = [
+                    alt.Tooltip("date:T", title=x_label, format="%Y-%m-%d"),
+                    alt.Tooltip("total_duration:Q", title="总对话时长(分钟)", format=","),
+                ]
+                st.altair_chart(
+                    line_chart(adf, "total_duration", "日总对话时长", tip, color="#0891b2"),
+                    use_container_width=True,
+                )
+
+    with row4[1]:
+        with st.container(border=True):
+            left, right = st.columns([1, 2])
+            with left:
+                last_avg_dur = df.sort_values("date")["avg_duration_device"].iloc[-1]
+                st.markdown('<div class="metric-label">昨日设备平均对话时长</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="metric-big">{last_avg_dur:.1f}'
+                    f'<span style="font-size:14px;color:#94a3b8"> 分钟</span></div>',
+                    unsafe_allow_html=True,
+                )
+            with right:
+                tip = [
+                    alt.Tooltip("date:T", title=x_label, format="%Y-%m-%d"),
+                    alt.Tooltip("avg_duration_device:Q", title="设备平均对话时长(分钟)", format=".1f"),
+                ]
+                st.altair_chart(
+                    line_chart(adf, "avg_duration_device", "设备平均对话时长", tip, color="#ea580c"),
                     use_container_width=True,
                 )
 
@@ -314,6 +347,8 @@ def render():
         "次日留存率": (table["retention"] * 100).round(2).astype(str) + "%",
         "总对话轮数": table["total_rounds"],
         "设备平均对话轮次": table["avg_rounds_device"],
+        "总对话时长(分钟)": table["total_duration"],
+        "设备平均对话时长(分钟)": table["avg_duration_device"],
     })
 
     st.dataframe(table_out, use_container_width=True, hide_index=True)

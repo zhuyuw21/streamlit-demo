@@ -31,7 +31,18 @@ ENTERPRISES = [
     ("好未来", "10199", "10199_小思AI"),
 ]
 
-JINGZAO_APPS = [e for e in ENTERPRISES if e[0] == "京东京造产品"]
+JINGZAO_APPS = [
+    ("京东京造产品", "10461", "10461_小狗【JZ-01】"),
+    ("京东京造产品", "10372", "10372_云朵兔【J】"),
+    ("京东京造产品", "10580", "10580_智能音箱【JZ-S1】"),
+    ("京东京造产品", "10581", "10581_故事机【JZ-K1】"),
+    ("京东京造产品", "10582", "10582_学习机【JZ-E1】"),
+    ("京东京造产品", "10583", "10583_早教机器人【JZ-R1】"),
+    ("京东京造产品", "10584", "10584_睡眠灯【JZ-L1】"),
+    ("京东京造产品", "10585", "10585_点读机【JZ-P1】"),
+    ("京东京造产品", "10586", "10586_词典笔【JZ-W1】"),
+    ("京东京造产品", "10587", "10587_护眼台灯【JZ-D1】"),
+]
 
 # ── Mock data helpers ──────────────────────────────────────────────────────────
 def _stable_int(*parts, lo, hi):
@@ -117,7 +128,6 @@ def gen_bot_detail(the_dt: dt.date, app_label: str) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("对话轮次", ascending=False).reset_index(drop=True)
 
 
-@st.cache_data
 def gen_jingzao_sales(start: dt.date, end: dt.date) -> pd.DataFrame:
     rows = []
     current = start
@@ -176,6 +186,186 @@ METRIC_ORDER = [
     "设备日均使用时长(分)",
     "累计注册设备",
 ]
+
+
+# ── Overview data generators ───────────────────────────────────────────────────
+
+@st.cache_data
+def gen_overview_ts(end_dt: dt.date, n_days: int = 60) -> pd.DataFrame:
+    rows = []
+    for i in range(n_days):
+        d = end_dt - dt.timedelta(days=n_days - 1 - i)
+        new_reg = _stable_int(d.isoformat(), "ov_nr", lo=15, hi=90)
+        active = _stable_int(d.isoformat(), "ov_ac", lo=70, hi=260)
+        avg_rnd = _stable_int(d.isoformat(), "ov_ar", lo=1800, hi=5500) / 100.0
+        rows.append({"date": d, "new_reg": new_reg, "active": active, "avg_rounds": avg_rnd})
+    return pd.DataFrame(rows)
+
+
+@st.cache_data
+def gen_overview_table(the_dt: dt.date) -> pd.DataFrame:
+    rows = []
+    for _ename, app_id, app_name in ENTERPRISES:
+        k = (the_dt.isoformat(), app_id)
+        total_dev = _stable_int(k, "ov_td", lo=40, hi=1900)
+        cum_act = int(total_dev * _stable_int(k, "ov_car", lo=380, hi=720) / 1000)
+        new_reg = _stable_int(k, "ov_nr2", lo=0, hi=40)
+        active_dev = _stable_int(k, "ov_ad", lo=0, hi=max(1, total_dev // 8))
+        act_rate = round(active_dev / total_dev, 2) if total_dev > 0 else 0.0
+        new_act = _stable_int(k, "ov_na", lo=0, hi=max(1, new_reg + 1))
+        r1 = _stable_int(k, "ov_r1", lo=0, hi=max(1, active_dev))
+        r1_rate = round(r1 / max(active_dev, 1), 2)
+        r3 = _stable_int(k, "ov_r3", lo=0, hi=max(1, r1))
+        r3_rate = round(r3 / max(active_dev, 1), 2)
+        r7 = _stable_int(k, "ov_r7", lo=0, hi=max(1, r3))
+        r7_rate = round(r7 / max(active_dev, 1), 2)
+        cum_rnd = _stable_int(k, "ov_cr", lo=800, hi=40000)
+        daily_rnd = _stable_int(k, "ov_dr", lo=50, hi=2000)
+        avg_rnd2 = round(daily_rnd / max(active_dev, 1), 2)
+        rows.append({
+            "app_id": app_id, "app_name": app_name,
+            "设备总量": total_dev, "激活总量": cum_act,
+            "新增注册": new_reg, "活跃设备": active_dev, "活跃率": act_rate,
+            "新增活跃": new_act,
+            "次留量": r1, "次留率": r1_rate,
+            "三留量": r3, "三留率": r3_rate,
+            "七留量": r7, "七留率": r7_rate,
+            "累计轮次": cum_rnd, "对话轮次": daily_rnd, "平均轮次": avg_rnd2,
+        })
+    df = pd.DataFrame(rows)
+    totals = {
+        "app_id": "–", "app_name": "合计",
+        "设备总量": df["设备总量"].sum(), "激活总量": df["激活总量"].sum(),
+        "新增注册": df["新增注册"].sum(),
+        "活跃设备": df["活跃设备"].sum(),
+        "活跃率": round(df["活跃设备"].sum() / max(df["设备总量"].sum(), 1), 2),
+        "新增活跃": df["新增活跃"].sum(),
+        "次留量": df["次留量"].sum(),
+        "次留率": round(df["次留量"].sum() / max(df["活跃设备"].sum(), 1), 2),
+        "三留量": df["三留量"].sum(),
+        "三留率": round(df["三留量"].sum() / max(df["活跃设备"].sum(), 1), 2),
+        "七留量": df["七留量"].sum(),
+        "七留率": round(df["七留量"].sum() / max(df["活跃设备"].sum(), 1), 2),
+        "累计轮次": df["累计轮次"].sum(), "对话轮次": df["对话轮次"].sum(),
+        "平均轮次": round(df["对话轮次"].sum() / max(df["活跃设备"].sum(), 1), 2),
+    }
+    return pd.concat([pd.DataFrame([totals]), df], ignore_index=True)
+
+
+def _ov_line_chart(frame, y_field, y_title, tooltip_fields, color="#2563eb", height=130):
+    df = frame.copy()
+    df["date"] = pd.to_datetime(df["date"])
+    base = alt.Chart(df).encode(
+        x=alt.X("date:T", title=None, axis=alt.Axis(format="%m-%d", labelColor="#9ca3af")),
+    )
+    line = base.mark_line(color=color, point=False).encode(
+        y=alt.Y(f"{y_field}:Q", title=y_title,
+                axis=alt.Axis(labelColor="#9ca3af", titleColor="#9ca3af")),
+    )
+    points = base.mark_circle(size=45, color=color, opacity=0).encode(
+        y=alt.Y(f"{y_field}:Q"),
+        tooltip=tooltip_fields,
+    )
+    return (line + points).properties(height=height).configure_view(strokeWidth=0)
+
+
+# ── 家群分析 render ────────────────────────────────────────────────────────────
+def render_overview():
+    c1, c2, _ = st.columns([2, 2, 4])
+    with c1:
+        app_opts = ["全部"] + [e[1] for e in ENTERPRISES]
+        sel_app = st.selectbox("app_id", options=app_opts, index=0, key="ov_app")
+    with c2:
+        sel_dt = st.date_input("选择日期 (dt)", value=dt.date(2026, 6, 4), key="ov_dt")
+
+    end_date = sel_dt
+    ts = gen_overview_ts(end_date, n_days=30)
+
+    cum_reg = 1_120_000 + int(ts["new_reg"].sum())
+    last_active = int(ts["active"].iloc[-1])
+    period_active = int(ts["active"].sum())
+    last_avg = float(ts["avg_rounds"].iloc[-1])
+
+    st.markdown('<div class="section-title">大盘指标</div>', unsafe_allow_html=True)
+    row = st.columns(3)
+
+    with row[0]:
+        with st.container(border=True):
+            left, right = st.columns([1, 2])
+            with left:
+                st.markdown('<div class="metric-label">累计注册设备量</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-big" style="font-size:26px">{cum_reg:,}</div>', unsafe_allow_html=True)
+            with right:
+                tip = [
+                    alt.Tooltip("date:T", title="日期", format="%Y-%m-%d"),
+                    alt.Tooltip("new_reg:Q", title="单日新增注册", format=","),
+                ]
+                st.altair_chart(
+                    _ov_line_chart(ts, "new_reg", "单日新增注册设备量", tip),
+                    use_container_width=True,
+                )
+
+    with row[1]:
+        with st.container(border=True):
+            left, right = st.columns([1, 2])
+            with left:
+                st.markdown('<div class="metric-label">昨日活跃设备量</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-big" style="font-size:26px">{last_active:,}</div>', unsafe_allow_html=True)
+                st.markdown('<div class="metric-sub">近30日活跃设备量</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-big" style="font-size:26px">{period_active:,}</div>', unsafe_allow_html=True)
+            with right:
+                tip = [
+                    alt.Tooltip("date:T", title="日期", format="%Y-%m-%d"),
+                    alt.Tooltip("active:Q", title="活跃设备量", format=","),
+                ]
+                st.altair_chart(
+                    _ov_line_chart(ts, "active", "单日活跃设备量", tip, color="#16a34a"),
+                    use_container_width=True,
+                )
+
+    with row[2]:
+        with st.container(border=True):
+            left, right = st.columns([1, 2])
+            with left:
+                st.markdown('<div class="metric-label">昨日设备平均轮次</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-big" style="font-size:26px">{last_avg:.2f}</div>', unsafe_allow_html=True)
+            with right:
+                tip = [
+                    alt.Tooltip("date:T", title="日期", format="%Y-%m-%d"),
+                    alt.Tooltip("avg_rounds:Q", title="设备平均轮次", format=".2f"),
+                ]
+                st.altair_chart(
+                    _ov_line_chart(ts, "avg_rounds", "单日设备平均轮次", tip, color="#ea580c"),
+                    use_container_width=True,
+                )
+
+    tbl = gen_overview_table(end_date)
+    if sel_app != "全部":
+        tbl = tbl[(tbl["app_id"] == sel_app) | (tbl["app_id"] == "–")]
+
+    st.markdown('<div class="section-title">今日活跃app</div>', unsafe_allow_html=True)
+    st.dataframe(
+        tbl,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "app_id": st.column_config.TextColumn("app_id"),
+            "活跃率": st.column_config.NumberColumn(format="%.2f"),
+            "次留率": st.column_config.NumberColumn(format="%.2f"),
+            "三留率": st.column_config.NumberColumn(format="%.2f"),
+            "七留率": st.column_config.NumberColumn(format="%.2f"),
+            "平均轮次": st.column_config.NumberColumn(format="%.2f"),
+            "累计轮次": st.column_config.NumberColumn(format="%d"),
+            "对话轮次": st.column_config.NumberColumn(format="%d"),
+        },
+    )
+    st.download_button(
+        "⬇ 导出今日活跃app CSV",
+        data=tbl.to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"overview_{sel_dt}.csv",
+        mime="text/csv",
+        key="dl_ov",
+    )
 
 
 # ── Weekly comparison table ────────────────────────────────────────────────────
@@ -272,47 +462,7 @@ def render():
 
 # ── Drill-down detail (rendered in the 多维下钻 tab) ──────────────────────────
 def render_drilldown():
-    tab_app, tab_bot, tab_jz = st.tabs(["app维度明细", "Bot单日明细", "京造产品销量"])
-
-    with tab_app:
-        ca1, _ = st.columns([2, 6])
-        with ca1:
-            app_dt = st.date_input("选择日期 (dt)", value=dt.date(2026, 6, 2), key="app_dt")
-
-        app_df = gen_app_detail(app_dt)
-        col_order = [
-            "企业名称", "应用ID", "应用名称",
-            "昨日新增注册设备量", "累计注册设备量", "近7天新增注册设备量",
-            "昨日新增激活设备量", "累计激活设备量", "近7天新增激活设备量",
-            "昨日活跃设备量", "近7天活跃设备量",
-        ]
-        app_df = app_df[col_order]
-
-        st.caption(f"共 {len(app_df)} 条")
-        st.dataframe(
-            app_df,
-            use_container_width=True,
-            hide_index=True,
-            height=430,
-            column_config={
-                "应用ID": st.column_config.TextColumn("应用ID"),
-                "昨日新增注册设备量": st.column_config.NumberColumn(format="%d"),
-                "累计注册设备量": st.column_config.NumberColumn(format="%d"),
-                "近7天新增注册设备量": st.column_config.NumberColumn(format="%d"),
-                "昨日新增激活设备量": st.column_config.NumberColumn(format="%d"),
-                "累计激活设备量": st.column_config.NumberColumn(format="%d"),
-                "近7天新增激活设备量": st.column_config.NumberColumn(format="%d"),
-                "昨日活跃设备量": st.column_config.NumberColumn(format="%d"),
-                "近7天活跃设备量": st.column_config.NumberColumn(format="%d"),
-            },
-        )
-        st.download_button(
-            "⬇ 导出 app明细 CSV",
-            data=app_df.to_csv(index=False).encode("utf-8-sig"),
-            file_name=f"module_2_app_detail_{app_dt}.csv",
-            mime="text/csv",
-            key="dl_app",
-        )
+    tab_bot, tab_ov, tab_jz = st.tabs(["Bot单日明细", "家群分析", "京造产品销量"])
 
     with tab_bot:
         cb1, cb2, _ = st.columns([2, 3, 3])
@@ -348,61 +498,21 @@ def render_drilldown():
             key="dl_bot",
         )
 
+    with tab_ov:
+        render_overview()
+
     with tab_jz:
         jz_c1, jz_c2, _ = st.columns([2, 3, 3])
         with jz_c1:
-            jz_range = st.date_input(
-                "时间范围",
-                value=(dt.date(2026, 5, 20), dt.date(2026, 6, 2)),
-                key="jz_range",
-            )
+            jz_dt = st.date_input("选择日期 (dt)", value=dt.date(2026, 6, 2), key="jz_dt")
         with jz_c2:
             jz_app_options = ["全部"] + [e[2] for e in JINGZAO_APPS]
             jz_sel_app = st.selectbox("选择应用", options=jz_app_options, key="jz_app")
 
-        if isinstance(jz_range, (list, tuple)) and len(jz_range) == 2:
-            jz_start, jz_end = jz_range
-        else:
-            jz_start = jz_end = dt.date(2026, 6, 2)
-
-        jz_df = gen_jingzao_sales(jz_start, jz_end)
+        jz_df = gen_jingzao_sales(jz_dt, jz_dt)
         if jz_sel_app != "全部":
             jz_df = jz_df[jz_df["应用名称"] == jz_sel_app].reset_index(drop=True)
 
-        # ── Summary metrics ───────────────────────────────────────────────────
-        summary = jz_df.groupby("应用名称", sort=False)["日销量"].sum().reset_index()
-        summary.columns = ["应用名称", "区间总销量"]
-        metric_cols = st.columns(max(len(summary), 1))
-        for i, row in summary.iterrows():
-            with metric_cols[i]:
-                with st.container(border=True):
-                    st.markdown(f'<div class="metric-label">{row["应用名称"]}</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="metric-big">{fmt_int(row["区间总销量"])}</div>', unsafe_allow_html=True)
-                    st.markdown('<div class="metric-sub">区间总销量</div>', unsafe_allow_html=True)
-
-        # ── Trend chart ───────────────────────────────────────────────────────
-        trend_chart = (
-            alt.Chart(jz_df)
-            .mark_line(point=alt.OverlayMarkDef(size=40))
-            .encode(
-                x=alt.X("_ts:T", title=None,
-                        axis=alt.Axis(format="%m-%d", labelColor="#9ca3af")),
-                y=alt.Y("日销量:Q", title="日销量",
-                        axis=alt.Axis(labelColor="#9ca3af", titleColor="#9ca3af")),
-                color=alt.Color("应用名称:N",
-                                legend=alt.Legend(title=None, orient="top")),
-                tooltip=[
-                    alt.Tooltip("_ts:T", title="日期", format="%Y-%m-%d"),
-                    alt.Tooltip("应用名称:N", title="应用"),
-                    alt.Tooltip("日销量:Q", title="日销量", format=","),
-                ],
-            )
-            .properties(height=260)
-            .configure_view(strokeWidth=0)
-        )
-        st.altair_chart(trend_chart, use_container_width=True)
-
-        # ── Detail table ──────────────────────────────────────────────────────
         display_df = jz_df.drop(columns=["_ts"])
         st.caption(f"共 {len(display_df)} 条")
         st.dataframe(
@@ -418,7 +528,7 @@ def render_drilldown():
         st.download_button(
             "⬇ 导出京造销量 CSV",
             data=display_df.to_csv(index=False).encode("utf-8-sig"),
-            file_name=f"module_2_jingzao_sales_{jz_start}_{jz_end}.csv",
+            file_name=f"module_2_jingzao_sales_{jz_dt}.csv",
             mime="text/csv",
             key="dl_jz",
         )

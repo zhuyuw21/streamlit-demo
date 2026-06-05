@@ -125,16 +125,14 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tabs = st.tabs(["核心指标", "周对比分析", "注册激活与留存", "多维下钻"])
+tabs = st.tabs(["大盘概况", "产品分析", "业务下钻"])
 
 with tabs[0]:
     Module1.render()
-
-with tabs[1]:
     Module2.render()
 
-with tabs[2]:
+with tabs[1]:
     Module3.render()
 
-with tabs[3]:
+with tabs[2]:
     Module2.render_drilldown()
