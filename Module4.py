@@ -170,6 +170,7 @@ def render():
         mime="text/csv",
     )
 
+    render_retention_heatmap()
     render_dau_ranking()
 
 
@@ -294,8 +295,6 @@ def render_dau_ranking():
         key="m4_dau_dl",
     )
 
-    render_retention_heatmap()
-
 
 # ── 新增设备留存热力图 ──────────────────────────────────────────────────────────
 def _sf(*parts, lo, hi, nd=2):
@@ -386,8 +385,6 @@ def render_retention_heatmap():
         height=max(300, n_rows * 26)
     ).configure_view(strokeWidth=0)
     st.altair_chart(hm_chart, use_container_width=True)
-
-    render_product_summary()
 
 
 # ── 分产品统计汇总 ──────────────────────────────────────────────────────────────

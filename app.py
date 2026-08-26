@@ -184,3 +184,5 @@ with tabs[0]:
     Module1.render()
     Module2.render()
     Module4.render()
+    Module1.render_summary()
+    Module4.render_product_summary()

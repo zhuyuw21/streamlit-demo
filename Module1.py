@@ -209,7 +209,7 @@ def render():
     APP_ID_OPTIONS = ["全部", "app_1001", "app_1002", "app_1003", "app_1004"]
     TAG_OPTIONS = ["智能音箱", "车载", "手表", "耳机", "大屏"]
 
-    f1, f2, _ = st.columns([3, 3, 4])
+    f1, f2, f3, _ = st.columns([3, 3, 3, 3])
     with f1:
         sel_app_ids = st.multiselect(
             "App ID",
@@ -224,9 +224,21 @@ def render():
             key="m1_tags",
             placeholder="选择标签",
         )
+    with f3:
+        sel_unique_entry = st.selectbox(
+            "是否唯一入口",
+            options=["全部", "唯一入口", "其他"],
+            index=0,
+            key="m1_unique_entry",
+        )
 
     mask = (FULL_DF["date"].dt.date >= start_date) & (FULL_DF["date"].dt.date <= end_date)
     df = FULL_DF.loc[mask].copy().reset_index(drop=True)
+
+    # 保存给「统计汇总」使用(该表已挪至页面底部,分产品统计汇总正上方)
+    st.session_state["m1_summary_df"] = df
+    st.session_state["m1_summary_start"] = start_date
+    st.session_state["m1_summary_end"] = end_date
 
     adf = aggregate(df, "日")
     x_label = "日期"
@@ -241,10 +253,16 @@ def render():
             with left:
                 cur_cum_reg = adf["cum_reg"].iloc[-1]
                 delta_reg = (adf["cum_reg"].iloc[-1] - adf["cum_reg"].iloc[-2]) / adf["cum_reg"].iloc[-2] if len(adf) > 1 else 0
+                yest_new_reg = adf["new_reg"].iloc[-1]
+                dod_reg = (adf["new_reg"].iloc[-1] / adf["new_reg"].iloc[-2] - 1) if len(adf) > 1 and adf["new_reg"].iloc[-2] != 0 else 0
                 st.markdown('<div class="metric-label">累计注册设备</div>', unsafe_allow_html=True)
                 st.markdown(f'<div class="metric-big">{fmt_num(cur_cum_reg)}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="delta-up" style="font-size:15px">↗ {delta_reg*100:.1f}%</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="metric-sub">今日新增 +{fmt_num(adf["new_reg"].iloc[-1])}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-sub">新增注册设备 {fmt_num(48327)}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-sub">昨日新增 +{fmt_num(yest_new_reg)}</div>', unsafe_allow_html=True)
+                if dod_reg >= 0:
+                    st.markdown(f'<div class="metric-sub">日环比DoD <span class="delta-up">↗ {dod_reg*100:.2f}%</span></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="metric-sub">日环比DoD <span class="delta-down">↘ {abs(dod_reg)*100:.2f}%</span></div>', unsafe_allow_html=True)
             with right:
                 tip = [
                     alt.Tooltip("date:T", title=x_label, format="%Y-%m-%d"),
@@ -260,11 +278,10 @@ def render():
             left, right = st.columns([1, 2])
             with left:
                 cur_cum_act = adf["cum_act"].iloc[-1]
-                delta_act = (adf["cum_act"].iloc[-1] - adf["cum_act"].iloc[-2]) / adf["cum_act"].iloc[-2] if len(adf) > 1 else 0
                 cur_ar = adf["act_rate"].iloc[-1]
                 st.markdown('<div class="metric-label">累计激活设备</div>', unsafe_allow_html=True)
                 st.markdown(f'<div class="metric-big">{fmt_num(cur_cum_act)}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="delta-up" style="font-size:15px">↗ {delta_act*100:.1f}%</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-sub">新增激活设备 {fmt_num(33415)}</div>', unsafe_allow_html=True)
                 st.markdown(f'<div class="metric-sub">激活率 {pct(cur_ar)}</div>', unsafe_allow_html=True)
             with right:
                 tip = [
@@ -452,7 +469,15 @@ def render():
                     use_container_width=True,
                 )
 
+
+def render_summary():
     # ── 统计汇总 ──────────────────────────────────────────────────────────────
+    df = st.session_state.get("m1_summary_df")
+    if df is None:
+        return
+    start_date = st.session_state.get("m1_summary_start")
+    end_date = st.session_state.get("m1_summary_end")
+
     st.markdown('<div class="section-title">统计汇总</div>', unsafe_allow_html=True)
 
     table = df.sort_values("date", ascending=False).copy()
