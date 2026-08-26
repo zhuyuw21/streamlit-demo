@@ -227,7 +227,7 @@ def render():
     with f3:
         sel_unique_entry = st.selectbox(
             "是否唯一入口",
-            options=["全部", "唯一入口", "其他"],
+            options=["全部", "唯一入口"],
             index=0,
             key="m1_unique_entry",
         )
